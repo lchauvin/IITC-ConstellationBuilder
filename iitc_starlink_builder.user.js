@@ -44,7 +44,13 @@ function wrapper(plugin_info) {
 
   window.plugin.starlinkbuilder.listValidPortals;
 
-  window.plugin.starlinkbuilder.ignoreExistingLinks = false;
+  window.plugin.starlinkbuilder.ignoreValue = 3;
+
+  window.plugin.starlinkbuilder.ignoreTeamLinksFlag = 0b10;
+  window.plugin.starlinkbuilder.ignoreTeamLinks = true;
+
+  window.plugin.starlinkbuilder.ignoreEnemyLinksFlag = 0b01;
+  window.plugin.starlinkbuilder.ignoreEnemyLinks = true;
 
   // The entry point for this plugin.
   window.plugin.starlinkbuilder.setup = function() {
@@ -66,7 +72,10 @@ function wrapper(plugin_info) {
   }
 
   window.plugin.starlinkbuilder.setAnchor = function() {
-    if (window.selectedPortal == null){ return; }
+    if (window.selectedPortal == null){
+      alert('No portal selected.');
+      return;
+    }
 
     var p = window.portals[window.selectedPortal];
     window.plugin.starlinkbuilder.anchorlatlng = p.getLatLng();
@@ -80,9 +89,16 @@ function wrapper(plugin_info) {
     <i>Anchor:</i><br>
     <form name='playerlist' action='#' method='post' target='_blank'>
     <button type="submit" form="maxfield" value="Set Anchor" onclick='window.plugin.starlinkbuilder.setAnchor()'>Set Anchor</button>&nbsp;&nbsp;<a id="anchorName">${window.plugin.starlinkbuilder.anchortitle}</a><br/>
-    <a>Number of links (1-${window.plugin.starlinkbuilder.MAX_LINK}):</a><input type="number" id='num_links' name="num_links" min="1" max="${window.plugin.starlinkbuilder.MAX_LINK}" value="${window.plugin.starlinkbuilder.num_links}"><br/>
-    <input type="checkbox" id="ignore-existing-links" name="ignore-existing-links" onclick='window.plugin.starlinkbuilder.updateIgnoreExistingLinks()'>
-    <label for="ignore-existing-links">Ignore existing links</label><br>
+    <label for="num_links">Number of links (1-${window.plugin.starlinkbuilder.MAX_LINK}):</label>
+    <input type="number" id='num_links' name="num_links" min="1" max="${window.plugin.starlinkbuilder.MAX_LINK}" value="${window.plugin.starlinkbuilder.num_links}"><br/>
+    <label for="ignore-select">Ignore Links:</label>
+    <select name="ignore-select" id="ignore-select" onchange='window.plugin.starlinkbuilder.updateIgnoreValues()'>
+    <option value="3" selected>ALL</option>
+    <option value="2">TEAM</option>
+    <option value="1">ENEMY</option>
+    <option value="0">NONE</option>
+    </select>
+    <br>
     <button type="submit" form="maxfield" value="Save" onclick='window.plugin.starlinkbuilder.saveConstellation()' style="float:right">Save</button>
     <button type="submit" form="maxfield" value="Build" onclick='window.plugin.starlinkbuilder.buildConstellation()' style="float:right">Build Starlink</button>
     </form>
@@ -96,8 +112,11 @@ function wrapper(plugin_info) {
     alert('Starlink Saved.');
   }
 
-  window.plugin.starlinkbuilder.updateIgnoreExistingLinks = function() {
-    window.plugin.starlinkbuilder.ignoreExistingLinks = document.getElementById('ignore-existing-links').checked;
+  window.plugin.starlinkbuilder.updateIgnoreValues = function() {
+    // Get links to ignore
+    window.plugin.starlinkbuilder.ignoreValue = parseInt(document.getElementById('ignore-select').value);
+    window.plugin.starlinkbuilder.ignoreTeamLinks = !!(window.plugin.starlinkbuilder.ignoreValue & window.plugin.starlinkbuilder.ignoreTeamLinksFlag);
+    window.plugin.starlinkbuilder.ignoreEnemyLinks = !!(window.plugin.starlinkbuilder.ignoreValue & window.plugin.starlinkbuilder.ignoreEnemyLinksFlag);
   }
 
   window.plugin.starlinkbuilder.buildConstellation = function() {
@@ -128,13 +147,11 @@ function wrapper(plugin_info) {
     }
 
     // Check link validity
-    if (!window.plugin.starlinkbuilder.ignoreExistingLinks){
-      var validSortedPortals = sortedPortals.filter(window.plugin.starlinkbuilder.isLinkValid);
-    }else{
+    if (window.plugin.starlinkbuilder.ignoreTeamLinks && window.plugin.starlinkbuilder.ignoreEnemyLinks){
       var validSortedPortals = sortedPortals;
+    }else{
+      var validSortedPortals = sortedPortals.filter(toPortal => window.plugin.starlinkbuilder.isLinkValid(toPortal));
     }
-    //console.log(sortedPortals.length);
-    //console.log(validSortedPortals.length);
 
     // Reduce set to num_links if necessary
     if (validSortedPortals.length > window.plugin.starlinkbuilder.num_links){
@@ -163,18 +180,18 @@ function wrapper(plugin_info) {
 
   window.plugin.starlinkbuilder.isLinkValid = function(p){
 
-
-    var team = teamStringToId("R"); // team doesn't matter as links can't cross no matter which team their are from
+    var player_team = window.PLAYER.team === 'RESISTANCE' ? 'R' : 'E';
+    var team_id = teamStringToId(player_team);
     var latlngs = [
       window.plugin.starlinkbuilder.anchorlatlng,
       p.getLatLng()
     ];
     var new_link = L.geodesicPolyline(latlngs, {
-      color: COLORS[team],
+      color: COLORS[team_id],
       opacity: 0,
       interactive: false,
 
-      team: team,
+      team: team_id,
       //ent: ent,  // LEGACY - TO BE REMOVED AT SOME POINT! use .guid, .timestamp and .data instead
       //guid: ent[0],
       //timestamp: ent[1],
@@ -183,14 +200,23 @@ function wrapper(plugin_info) {
 
     var isValid = true;
     $.each(window.links, function (guid, link) {
+      // ignoreEnemyLinks == true && link is enemy. Do not check if links cross.
+      if (window.plugin.starlinkbuilder.ignoreEnemyLinks && link.options.data.team !== player_team){
+        return;
+      }
+
+      // ignoreTeamLinks == true && link is friendly. Do no check if links cross.
+      if (window.plugin.starlinkbuilder.ignoreTeamLinks && link.options.data.team === player_team){
+        return;
+      }
+
+      // Check if links are crossing
       if (plugin.crossLinks.testPolyLine(new_link, link)){
-        //console.log("Invalid: " + p.options.data.title);
         isValid = false;
         return false; // Exit the each function
       }
     });
 
-    //console.log("Valid: " + p.options.data.title);
     return isValid;
   }
 
@@ -203,7 +229,7 @@ function wrapper(plugin_info) {
         width: 700
     });
 
-    document.getElementById('ignore-existing-links').checked = window.plugin.starlinkbuilder.ignoreExistingLinks;
+    $('#ignore-select option[value="' + window.plugin.starlinkbuilder.ignoreValue + '"]').prop('selected', true);
   }
 
   var setup = window.plugin.starlinkbuilder.setup;
