@@ -84,7 +84,7 @@ function wrapper(plugin_info) {
     <input type="checkbox" id="ignore-existing-links" name="ignore-existing-links" onclick='window.plugin.starlinkbuilder.updateIgnoreExistingLinks()'>
     <label for="ignore-existing-links">Ignore existing links</label><br>
     <button type="submit" form="maxfield" value="Save" onclick='window.plugin.starlinkbuilder.saveConstellation()' style="float:right">Save</button>
-    <button type="submit" form="maxfield" value="Build" onclick='window.plugin.starlinkbuilder.buildConstellation()' style="float:right">Build Constellation</button>
+    <button type="submit" form="maxfield" value="Build" onclick='window.plugin.starlinkbuilder.buildConstellation()' style="float:right">Build Starlink</button>
     </form>
     `;
 
