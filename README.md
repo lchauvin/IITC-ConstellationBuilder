@@ -1,3 +1,3 @@
-# IITC-ConstellationBuilder
+# IITC-StarlinkBuilder
 
-Plugin for constellation building on IITC plugin for Ingress.
+Plugin for starlink building on IITC plugin for Ingress.
